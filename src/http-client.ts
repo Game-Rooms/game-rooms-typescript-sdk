@@ -6,11 +6,16 @@ export class GameRoomsHttpClient {
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: HttpClientOptions) {
+    let parsedBaseUrl: URL;
     try {
-      this.baseUrl = new URL(options.baseUrl).toString().replace(/\/$/, "");
+      parsedBaseUrl = new URL(options.baseUrl);
     } catch {
       throw new GameRoomsError("Invalid baseUrl; expected an absolute HTTP URL");
     }
+    if (parsedBaseUrl.protocol !== "http:" && parsedBaseUrl.protocol !== "https:") {
+      throw new GameRoomsError("Invalid baseUrl; expected an absolute HTTP URL");
+    }
+    this.baseUrl = parsedBaseUrl.toString().replace(/\/$/, "");
     const fallbackFetch = (globalThis as { fetch?: typeof fetch }).fetch;
     if (!options.fetch && !fallbackFetch) {
       throw new GameRoomsError("No fetch implementation found; provide fetch in this runtime");

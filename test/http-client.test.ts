@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GameRoomsError, GameRoomsHttpClient, RoomLockedError, RoomNotFoundError } from "../src";
+import { GameRoomsError, GameRoomsHttpClient, RoomFullError, RoomLockedError, RoomNotFoundError } from "../src";
 
 describe("GameRoomsHttpClient", () => {
   it("creates a room", async () => {
@@ -31,6 +31,15 @@ describe("GameRoomsHttpClient", () => {
     });
 
     await expect(client.lookupRoom("WXYZ")).rejects.toBeInstanceOf(RoomLockedError);
+  });
+
+  it("maps 409 to RoomFullError", async () => {
+    const client = new GameRoomsHttpClient({
+      baseUrl: "https://example.test",
+      fetch: async () => new Response(JSON.stringify({ message: "full" }), { status: 409 })
+    });
+
+    await expect(client.lookupRoom("WXYZ")).rejects.toBeInstanceOf(RoomFullError);
   });
 
   it("throws if no fetch implementation is available", () => {

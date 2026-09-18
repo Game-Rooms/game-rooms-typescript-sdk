@@ -8,6 +8,13 @@ type ListenerMap = {
   notification: Array<(packet: ServerPacket) => void>;
   message: Array<(packet: ServerPacket) => void>;
 };
+type ActiveSocketHandlers = {
+  socket: WebSocketLike;
+  open: () => void;
+  close: (event: { code: number; reason: string }) => void;
+  error: (event: unknown) => void;
+  message: (event: { data: string }) => void;
+};
 
 const defaultFactory: WebSocketFactory = (url: string) => {
   const WebSocketConstructor = (globalThis as { WebSocket?: new (value: string) => WebSocketLike }).WebSocket;
@@ -23,6 +30,8 @@ export class GameRoomsSocketClient {
   private readonly wsUrl: string;
   private readonly webSocketFactory: WebSocketFactory;
   private socket?: WebSocketLike;
+  private activeHandlers?: ActiveSocketHandlers;
+  private connectReject?: (reason?: unknown) => void;
   private sequence = 0;
   private readonly pending = new Map<number, { resolve: (value: unknown) => void; reject: (reason?: unknown) => void }>();
   private readonly listeners: ListenerMap = {
@@ -34,11 +43,16 @@ export class GameRoomsSocketClient {
   };
 
   constructor(options: SocketClientOptions) {
+    let parsedWsUrl: URL;
     try {
-      this.wsUrl = new URL(options.wsUrl).toString().replace(/\/$/, "");
+      parsedWsUrl = new URL(options.wsUrl);
     } catch {
       throw new ProtocolError("Invalid wsUrl; expected an absolute WebSocket URL");
     }
+    if (parsedWsUrl.protocol !== "ws:" && parsedWsUrl.protocol !== "wss:") {
+      throw new ProtocolError("Invalid wsUrl; expected an absolute WebSocket URL");
+    }
+    this.wsUrl = parsedWsUrl.toString().replace(/\/$/, "");
     this.webSocketFactory = options.webSocketFactory ?? defaultFactory;
   }
 
@@ -60,21 +74,26 @@ export class GameRoomsSocketClient {
     }
 
     return new Promise((resolve, reject) => {
+      this.connectReject = reject;
       if (!this.socket) {
         reject(new ProtocolError("WebSocket was not created"));
         return;
       }
 
+      const socket = this.socket;
       let settled = false;
       const openHandler = () => {
-        this.socket?.removeEventListener?.("open", openHandler);
+        socket.removeEventListener?.("open", openHandler);
+        this.connectReject = undefined;
         settled = true;
         this.emit("open");
         resolve();
       };
 
       const closeHandler = (event: { code: number; reason: string }) => {
-        this.detachSocketListeners(openHandler, closeHandler, errorHandler, messageHandler);
+        this.detachSocketListeners(socket, openHandler, closeHandler, errorHandler, messageHandler);
+        this.activeHandlers = undefined;
+        this.connectReject = undefined;
         this.rejectAllPending(new ProtocolError("Socket closed", { details: event }));
         this.socket = undefined;
         this.emit("close", event);
@@ -85,7 +104,9 @@ export class GameRoomsSocketClient {
 
       const errorHandler = (event: unknown) => {
         const wrappedError = new ProtocolError("Socket error", { details: event });
-        this.detachSocketListeners(openHandler, closeHandler, errorHandler, messageHandler);
+        this.detachSocketListeners(socket, openHandler, closeHandler, errorHandler, messageHandler);
+        this.activeHandlers = undefined;
+        this.connectReject = undefined;
         this.rejectAllPending(wrappedError);
         this.socket = undefined;
         this.emit("error", wrappedError);
@@ -98,15 +119,33 @@ export class GameRoomsSocketClient {
         this.handleIncoming(event.data);
       };
 
-      this.socket.addEventListener("open", openHandler);
-      this.socket.addEventListener("close", closeHandler);
-      this.socket.addEventListener("error", errorHandler);
-      this.socket.addEventListener("message", messageHandler);
+      socket.addEventListener("open", openHandler);
+      socket.addEventListener("close", closeHandler);
+      socket.addEventListener("error", errorHandler);
+      socket.addEventListener("message", messageHandler);
+      this.activeHandlers = { socket, open: openHandler, close: closeHandler, error: errorHandler, message: messageHandler };
     });
   }
 
   close(code?: number, reason?: string): void {
-    this.socket?.close(code, reason);
+    const socket = this.socket;
+    if (!socket) {
+      return;
+    }
+
+    if (socket.readyState !== OPEN_STATE) {
+      this.detachCurrentSocketListeners();
+      this.socket = undefined;
+      const closeError = new ProtocolError("Socket closed before connection opened", {
+        details: { code: code ?? 1000, reason: reason ?? "" }
+      });
+      this.connectReject?.(closeError);
+      this.connectReject = undefined;
+      this.rejectAllPending(closeError);
+      this.emit("close", { code: code ?? 1000, reason: reason ?? "" });
+    }
+
+    socket.close(code, reason);
   }
 
   on<E extends keyof ListenerMap>(event: E, listener: ListenerMap[E][number]): void {
@@ -165,6 +204,10 @@ export class GameRoomsSocketClient {
     }
 
     const url = new URL(this.wsUrl);
+    for (const [key, value] of Object.entries(options.query ?? {})) {
+      url.searchParams.set(key, value);
+    }
+
     url.searchParams.set("role", options.role);
     if (options.roomCode) {
       url.searchParams.set("code", options.roomCode);
@@ -176,10 +219,6 @@ export class GameRoomsSocketClient {
 
     if (options.token) {
       url.searchParams.set("token", options.token);
-    }
-
-    for (const [key, value] of Object.entries(options.query ?? {})) {
-      url.searchParams.set(key, value);
     }
 
     return url.toString();
@@ -239,15 +278,25 @@ export class GameRoomsSocketClient {
   }
 
   private detachSocketListeners(
+    socket: WebSocketLike,
     openHandler: () => void,
     closeHandler: (event: { code: number; reason: string }) => void,
     errorHandler: (event: unknown) => void,
     messageHandler: (event: { data: string }) => void
   ): void {
-    this.socket?.removeEventListener?.("open", openHandler);
-    this.socket?.removeEventListener?.("close", closeHandler);
-    this.socket?.removeEventListener?.("error", errorHandler);
-    this.socket?.removeEventListener?.("message", messageHandler);
+    socket.removeEventListener?.("open", openHandler);
+    socket.removeEventListener?.("close", closeHandler);
+    socket.removeEventListener?.("error", errorHandler);
+    socket.removeEventListener?.("message", messageHandler);
   }
 
+  private detachCurrentSocketListeners(): void {
+    const handlers = this.activeHandlers;
+    if (!handlers) {
+      return;
+    }
+
+    this.detachSocketListeners(handlers.socket, handlers.open, handlers.close, handlers.error, handlers.message);
+    this.activeHandlers = undefined;
+  }
 }
