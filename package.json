@@ -21,10 +21,7 @@
   "devDependencies": {
     "@types/node": "^26.6.1",
     "typescript": "^5.9.3",
-    "vitest": "^1.6.1"
-  },
-  "overrides": {
-    "@jridgewell/sourcemap-codec": "1.4.15"
+    "vitest": "^4.1.0"
   },
   "type": "module",
   "types": "dist/index.d.ts"
