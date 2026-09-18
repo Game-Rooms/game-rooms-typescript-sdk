@@ -45,4 +45,10 @@ describe("GameRoomsHttpClient", () => {
       (globalThis as { fetch?: typeof fetch }).fetch = previousFetch;
     }
   });
+
+  it("throws for invalid baseUrl", () => {
+    expect(() => {
+      new GameRoomsHttpClient({ baseUrl: "/api", fetch: async () => new Response("{}") });
+    }).toThrow(GameRoomsError);
+  });
 });

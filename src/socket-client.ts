@@ -18,19 +18,11 @@ const defaultFactory: WebSocketFactory = (url: string) => {
   return new WebSocketConstructor(url);
 };
 const OPEN_STATE = 1;
-const CLOSED_STATE = 3;
-type SocketListeners = {
-  open: () => void;
-  close: (event: { code: number; reason: string }) => void;
-  error: (event: unknown) => void;
-  message: (event: { data: string }) => void;
-};
 
 export class GameRoomsSocketClient {
   private readonly wsUrl: string;
   private readonly webSocketFactory: WebSocketFactory;
   private socket?: WebSocketLike;
-  private socketListeners?: SocketListeners;
   private sequence = 0;
   private readonly pending = new Map<number, { resolve: (value: unknown) => void; reject: (reason?: unknown) => void }>();
   private readonly listeners: ListenerMap = {
@@ -52,12 +44,7 @@ export class GameRoomsSocketClient {
 
   connect(options: SocketConnectOptions): Promise<void> {
     if (this.socket) {
-      if (this.socket.readyState !== CLOSED_STATE) {
-        return Promise.reject(new ProtocolError("Socket is already connected"));
-      }
-
-      this.detachCurrentSocketListeners();
-      this.socket = undefined;
+      return Promise.reject(new ProtocolError("Socket is already connected"));
     }
 
     let url: string;
@@ -88,7 +75,6 @@ export class GameRoomsSocketClient {
 
       const closeHandler = (event: { code: number; reason: string }) => {
         this.detachSocketListeners(openHandler, closeHandler, errorHandler, messageHandler);
-        this.socketListeners = undefined;
         this.rejectAllPending(new ProtocolError("Socket closed", { details: event }));
         this.socket = undefined;
         this.emit("close", event);
@@ -100,7 +86,6 @@ export class GameRoomsSocketClient {
       const errorHandler = (event: unknown) => {
         const wrappedError = new ProtocolError("Socket error", { details: event });
         this.detachSocketListeners(openHandler, closeHandler, errorHandler, messageHandler);
-        this.socketListeners = undefined;
         this.rejectAllPending(wrappedError);
         this.socket = undefined;
         this.emit("error", wrappedError);
@@ -117,12 +102,6 @@ export class GameRoomsSocketClient {
       this.socket.addEventListener("close", closeHandler);
       this.socket.addEventListener("error", errorHandler);
       this.socket.addEventListener("message", messageHandler);
-      this.socketListeners = {
-        open: openHandler,
-        close: closeHandler,
-        error: errorHandler,
-        message: messageHandler
-      };
     });
   }
 
@@ -271,17 +250,4 @@ export class GameRoomsSocketClient {
     this.socket?.removeEventListener?.("message", messageHandler);
   }
 
-  private detachCurrentSocketListeners(): void {
-    if (!this.socketListeners) {
-      return;
-    }
-
-    this.detachSocketListeners(
-      this.socketListeners.open,
-      this.socketListeners.close,
-      this.socketListeners.error,
-      this.socketListeners.message
-    );
-    this.socketListeners = undefined;
-  }
 }
