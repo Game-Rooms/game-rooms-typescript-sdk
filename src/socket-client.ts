@@ -9,7 +9,14 @@ type ListenerMap = {
   message: Array<(packet: ServerPacket) => void>;
 };
 
-const defaultFactory: WebSocketFactory = (url: string) => new WebSocket(url) as unknown as WebSocketLike;
+const defaultFactory: WebSocketFactory = (url: string) => {
+  const WebSocketConstructor = (globalThis as { WebSocket?: new (value: string) => WebSocketLike }).WebSocket;
+  if (!WebSocketConstructor) {
+    throw new ProtocolError("No WebSocket implementation found; provide webSocketFactory in this runtime");
+  }
+
+  return new WebSocketConstructor(url);
+};
 const OPEN_STATE = 1;
 const CLOSED_STATE = 3;
 
@@ -53,6 +60,7 @@ export class GameRoomsSocketClient {
 
       let settled = false;
       const openHandler = () => {
+        this.socket?.removeEventListener?.("open", openHandler);
         settled = true;
         this.emit("open");
         resolve();

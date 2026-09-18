@@ -13,23 +13,27 @@ npm install game-rooms-typescript-sdk
 ```ts
 import { GameRoomsHttpClient, GameRoomsSocketClient } from "game-rooms-typescript-sdk";
 
-const http = new GameRoomsHttpClient({
-  baseUrl: "https://your-game-rooms-api.example"
-});
+async function main() {
+  const http = new GameRoomsHttpClient({
+    baseUrl: "https://your-game-rooms-api.example"
+  });
 
-const room = await http.createRoom({ appId: "my-game" });
+  const room = await http.createRoom({ appId: "my-game" });
 
-const socket = new GameRoomsSocketClient({
-  wsUrl: "wss://your-game-rooms-api.example/socket"
-});
+  const socket = new GameRoomsSocketClient({
+    wsUrl: "wss://your-game-rooms-api.example/socket"
+  });
 
-await socket.connect({
-  role: "host",
-  roomCode: room.code,
-  token: room.hostToken
-});
+  await socket.connect({
+    role: "host",
+    roomCode: room.code,
+    token: room.hostToken
+  });
 
-await socket.createObject({ key: "state", type: "object", value: { started: true } });
+  await socket.createObject({ key: "state", type: "object", value: { started: true } });
+}
+
+void main();
 ```
 
 ## Features
