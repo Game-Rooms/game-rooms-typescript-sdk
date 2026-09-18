@@ -93,8 +93,10 @@ export class GameRoomsSocketClient {
       const closeHandler = (event: { code: number; reason: string }) => {
         this.detachSocketListeners(socket, openHandler, closeHandler, errorHandler, messageHandler);
         this.activeHandlers = undefined;
+        const closeError = new ProtocolError("Socket closed", { details: event });
+        this.emit("error", closeError);
         this.connectReject = undefined;
-        this.rejectAllPending(new ProtocolError("Socket closed", { details: event }));
+        this.rejectAllPending(closeError);
         this.socket = undefined;
         this.emit("close", event);
         if (!settled) {
