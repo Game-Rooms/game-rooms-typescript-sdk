@@ -20,7 +20,7 @@ const http = new GameRoomsHttpClient({
 const room = await http.createRoom({ appId: "my-game" });
 
 const socket = new GameRoomsSocketClient({
-  wsUrl: "wss://your-game-rooms-api.example/ws"
+  wsUrl: "wss://your-game-rooms-api.example/socket"
 });
 
 await socket.connect({

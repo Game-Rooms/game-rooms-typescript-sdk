@@ -10,6 +10,8 @@ type ListenerMap = {
 };
 
 const defaultFactory: WebSocketFactory = (url: string) => new WebSocket(url) as unknown as WebSocketLike;
+const OPEN_STATE = 1;
+const CLOSED_STATE = 3;
 
 export class GameRoomsSocketClient {
   private readonly wsUrl: string;
@@ -31,6 +33,10 @@ export class GameRoomsSocketClient {
   }
 
   connect(options: SocketConnectOptions): Promise<void> {
+    if (this.socket && this.socket.readyState !== CLOSED_STATE) {
+      return Promise.reject(new ProtocolError("Socket is already connected"));
+    }
+
     const url = this.createConnectionUrl(options);
     this.socket = this.webSocketFactory(url);
 
@@ -47,6 +53,7 @@ export class GameRoomsSocketClient {
 
       this.socket.addEventListener("close", (event) => {
         this.rejectAllPending(new ProtocolError("Socket closed", { details: event }));
+        this.socket = undefined;
         this.emit("close", event);
       });
 
@@ -73,6 +80,9 @@ export class GameRoomsSocketClient {
     if (!this.socket) {
       return Promise.reject(new ProtocolError("Socket is not connected"));
     }
+    if (this.socket.readyState !== OPEN_STATE) {
+      return Promise.reject(new ProtocolError("Socket is not open"));
+    }
 
     const seq = ++this.sequence;
     const payload: ClientPacket = { opcode, seq, params };
@@ -83,7 +93,12 @@ export class GameRoomsSocketClient {
         reject
       });
 
-      this.socket?.send(JSON.stringify(payload));
+      try {
+        this.socket?.send(JSON.stringify(payload));
+      } catch (error) {
+        this.pending.delete(seq);
+        reject(new ProtocolError("Failed to send request", { details: error }));
+      }
     });
   }
 
