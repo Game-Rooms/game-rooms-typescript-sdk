@@ -5,6 +5,7 @@ export class GameRoomsError extends Error {
 
   constructor(message: string, options?: { status?: number; code?: string; details?: unknown }) {
     super(message);
+    Object.setPrototypeOf(this, new.target.prototype);
     this.name = this.constructor.name;
     this.status = options?.status;
     this.code = options?.code;

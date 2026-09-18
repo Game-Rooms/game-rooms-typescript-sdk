@@ -16,6 +16,7 @@ class FakeSocket implements WebSocketLike {
   }
 
   close(code = 1000, reason = ""): void {
+    this.readyState = 3;
     for (const fn of this.listeners.close) {
       fn({ code, reason });
     }
@@ -143,5 +144,24 @@ describe("GameRoomsSocketClient", () => {
 
     await expect(client.connect({ role: "host" })).rejects.toBeInstanceOf(ProtocolError);
     await expect(client.connect({ role: "host", roomCode: "ABCD", roomId: "room-1" })).rejects.toBeInstanceOf(ProtocolError);
+  });
+
+  it("rejects connect when socket closes before open", async () => {
+    const fake = new FakeSocket();
+    const client = new GameRoomsSocketClient({
+      wsUrl: "wss://example.test/socket",
+      webSocketFactory: () => fake
+    });
+
+    const connected = client.connect({ role: "host", roomCode: "ABCD" });
+    fake.close(1006, "closed");
+
+    await expect(connected).rejects.toBeInstanceOf(ProtocolError);
+  });
+
+  it("throws for invalid wsUrl", () => {
+    expect(() => {
+      new GameRoomsSocketClient({ wsUrl: "/socket" });
+    }).toThrow(ProtocolError);
   });
 });

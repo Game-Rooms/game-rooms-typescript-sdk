@@ -35,7 +35,11 @@ export class GameRoomsSocketClient {
   };
 
   constructor(options: SocketClientOptions) {
-    this.wsUrl = options.wsUrl.replace(/\/$/, "");
+    try {
+      this.wsUrl = new URL(options.wsUrl).toString().replace(/\/$/, "");
+    } catch {
+      throw new ProtocolError("Invalid wsUrl; expected an absolute WebSocket URL");
+    }
     this.webSocketFactory = options.webSocketFactory ?? defaultFactory;
   }
 
@@ -71,6 +75,9 @@ export class GameRoomsSocketClient {
         this.rejectAllPending(new ProtocolError("Socket closed", { details: event }));
         this.socket = undefined;
         this.emit("close", event);
+        if (!settled) {
+          reject(new ProtocolError("Socket closed before connection opened", { details: event }));
+        }
       };
 
       const errorHandler = (event: unknown) => {

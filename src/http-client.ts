@@ -23,12 +23,11 @@ export class GameRoomsHttpClient {
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const hasBody = body !== undefined;
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       method,
-      headers: {
-        "content-type": "application/json"
-      },
-      body: body === undefined ? undefined : JSON.stringify(body)
+      headers: hasBody ? { "content-type": "application/json" } : undefined,
+      body: hasBody ? JSON.stringify(body) : undefined
     });
 
     const payload = await this.readJson(response);
