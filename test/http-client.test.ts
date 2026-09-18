@@ -42,6 +42,15 @@ describe("GameRoomsHttpClient", () => {
     await expect(client.lookupRoom("WXYZ")).rejects.toBeInstanceOf(RoomFullError);
   });
 
+  it("maps plain-text error responses into message", async () => {
+    const client = new GameRoomsHttpClient({
+      baseUrl: "https://example.test",
+      fetch: async () => new Response("room missing", { status: 404 })
+    });
+
+    await expect(client.lookupRoom("WXYZ")).rejects.toMatchObject({ message: "room missing" });
+  });
+
   it("throws if no fetch implementation is available", () => {
     const previousFetch = (globalThis as { fetch?: typeof fetch }).fetch;
     delete (globalThis as { fetch?: typeof fetch }).fetch;

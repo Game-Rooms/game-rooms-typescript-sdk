@@ -33,7 +33,7 @@ export class GameRoomsSocketClient {
   private activeHandlers?: ActiveSocketHandlers;
   private connectReject?: (reason?: unknown) => void;
   private sequence = 0;
-  private readonly pending = new Map<number, { resolve: (value: unknown) => void; reject: (reason?: unknown) => void }>();
+  private readonly pending = new Map<number, { opcode: string; resolve: (value: unknown) => void; reject: (reason?: unknown) => void }>();
   private readonly listeners: ListenerMap = {
     open: [],
     close: [],
@@ -134,15 +134,16 @@ export class GameRoomsSocketClient {
     if (!socket) {
       return;
     }
+    this.socket = undefined;
 
     if (socket.readyState !== OPEN_STATE) {
       this.detachCurrentSocketListeners();
-      this.socket = undefined;
       const closeError = new ProtocolError("Socket closed before connection opened", {
         details: { code: code ?? 1000, reason: reason ?? "" }
       });
       this.connectReject?.(closeError);
       this.connectReject = undefined;
+      this.emit("error", closeError);
       this.rejectAllPending(closeError);
       this.emit("close", { code: code ?? 1000, reason: reason ?? "" });
     }
@@ -167,6 +168,7 @@ export class GameRoomsSocketClient {
 
     return new Promise<TResult>((resolve, reject) => {
       this.pending.set(seq, {
+        opcode,
         resolve: resolve as (value: unknown) => void,
         reject
       });
@@ -245,6 +247,13 @@ export class GameRoomsSocketClient {
       }
 
       this.pending.delete(packet.pc);
+
+      if (packet.opcode !== waiter.opcode) {
+        waiter.reject(new ProtocolError("Mismatched response opcode", {
+          details: { expected: waiter.opcode, actual: packet.opcode, packet }
+        }));
+        return;
+      }
 
       if (packet.re) {
         waiter.reject(new ProtocolError(packet.re.message ?? "Request failed", {
