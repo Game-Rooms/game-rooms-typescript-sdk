@@ -25,6 +25,10 @@ class FakeSocket implements WebSocketLike {
     this.listeners[type].push(listener);
   }
 
+  removeEventListener(type: "open" | "close" | "error" | "message", listener: (event?: any) => void): void {
+    this.listeners[type] = this.listeners[type].filter((registered) => registered !== listener);
+  }
+
   emit(type: "open" | "close" | "error" | "message", event?: any): void {
     for (const fn of this.listeners[type]) {
       fn(event);
@@ -71,5 +75,73 @@ describe("GameRoomsSocketClient", () => {
     });
 
     await expect(requestPromise).rejects.toBeInstanceOf(ProtocolError);
+  });
+
+  it("emits error for invalid JSON packets", async () => {
+    const fake = new FakeSocket();
+    const client = new GameRoomsSocketClient({
+      wsUrl: "wss://example.test/socket",
+      webSocketFactory: () => fake
+    });
+
+    const connected = client.connect({ role: "player", roomCode: "ABCD" });
+    fake.emit("open");
+    await connected;
+
+    let errorCount = 0;
+    client.on("error", () => {
+      errorCount += 1;
+    });
+
+    fake.emit("message", { data: "not-json" });
+    expect(errorCount).toBe(1);
+  });
+
+  it("emits error for unmatched pc", async () => {
+    const fake = new FakeSocket();
+    const client = new GameRoomsSocketClient({
+      wsUrl: "wss://example.test/socket",
+      webSocketFactory: () => fake
+    });
+
+    const connected = client.connect({ role: "host", roomCode: "ABCD" });
+    fake.emit("open");
+    await connected;
+
+    let errorCount = 0;
+    client.on("error", () => {
+      errorCount += 1;
+    });
+
+    fake.emit("message", { data: JSON.stringify({ pc: 999, opcode: "noop" }) });
+    expect(errorCount).toBe(1);
+  });
+
+  it("rejects pending requests on socket error", async () => {
+    const fake = new FakeSocket();
+    const client = new GameRoomsSocketClient({
+      wsUrl: "wss://example.test/socket",
+      webSocketFactory: () => fake
+    });
+
+    const connected = client.connect({ role: "player", roomCode: "ABCD" });
+    fake.emit("open");
+    await connected;
+
+    const requestPromise = client.request("object.get", { key: "state" });
+    fake.emit("error", new Error("boom"));
+
+    await expect(requestPromise).rejects.toBeInstanceOf(ProtocolError);
+  });
+
+  it("requires exactly one room identifier", async () => {
+    const fake = new FakeSocket();
+    const client = new GameRoomsSocketClient({
+      wsUrl: "wss://example.test/socket",
+      webSocketFactory: () => fake
+    });
+
+    await expect(client.connect({ role: "host" })).rejects.toBeInstanceOf(ProtocolError);
+    await expect(client.connect({ role: "host", roomCode: "ABCD", roomId: "room-1" })).rejects.toBeInstanceOf(ProtocolError);
   });
 });

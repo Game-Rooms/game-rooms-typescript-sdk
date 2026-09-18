@@ -61,6 +61,10 @@ export interface WebSocketLike {
   addEventListener(type: "close", listener: (event: { code: number; reason: string }) => void): void;
   addEventListener(type: "error", listener: (event: unknown) => void): void;
   addEventListener(type: "message", listener: (event: { data: string }) => void): void;
+  removeEventListener?(type: "open", listener: () => void): void;
+  removeEventListener?(type: "close", listener: (event: { code: number; reason: string }) => void): void;
+  removeEventListener?(type: "error", listener: (event: unknown) => void): void;
+  removeEventListener?(type: "message", listener: (event: { data: string }) => void): void;
 }
 
 export type WebSocketFactory = (url: string) => WebSocketLike;

@@ -37,7 +37,12 @@ export class GameRoomsSocketClient {
       return Promise.reject(new ProtocolError("Socket is already connected"));
     }
 
-    const url = this.createConnectionUrl(options);
+    let url: string;
+    try {
+      url = this.createConnectionUrl(options);
+    } catch (error) {
+      return Promise.reject(error);
+    }
     this.socket = this.webSocketFactory(url);
 
     return new Promise((resolve, reject) => {
@@ -46,25 +51,38 @@ export class GameRoomsSocketClient {
         return;
       }
 
-      this.socket.addEventListener("open", () => {
+      let settled = false;
+      const openHandler = () => {
+        settled = true;
         this.emit("open");
         resolve();
-      });
+      };
 
-      this.socket.addEventListener("close", (event) => {
+      const closeHandler = (event: { code: number; reason: string }) => {
+        this.detachSocketListeners(openHandler, closeHandler, errorHandler, messageHandler);
         this.rejectAllPending(new ProtocolError("Socket closed", { details: event }));
         this.socket = undefined;
         this.emit("close", event);
-      });
+      };
 
-      this.socket.addEventListener("error", (event) => {
+      const errorHandler = (event: unknown) => {
+        this.detachSocketListeners(openHandler, closeHandler, errorHandler, messageHandler);
+        this.rejectAllPending(new ProtocolError("Socket error", { details: event }));
+        this.socket = undefined;
         this.emit("error", event);
-        reject(new ProtocolError("Socket error", { details: event }));
-      });
+        if (!settled) {
+          reject(new ProtocolError("Socket error", { details: event }));
+        }
+      };
 
-      this.socket.addEventListener("message", (event) => {
+      const messageHandler = (event: { data: string }) => {
         this.handleIncoming(event.data);
-      });
+      };
+
+      this.socket.addEventListener("open", openHandler);
+      this.socket.addEventListener("close", closeHandler);
+      this.socket.addEventListener("error", errorHandler);
+      this.socket.addEventListener("message", messageHandler);
     });
   }
 
@@ -123,6 +141,10 @@ export class GameRoomsSocketClient {
   }
 
   private createConnectionUrl(options: SocketConnectOptions): string {
+    if (Boolean(options.roomCode) === Boolean(options.roomId)) {
+      throw new ProtocolError("Provide exactly one of roomCode or roomId");
+    }
+
     const url = new URL(this.wsUrl);
     url.searchParams.set("role", options.role);
     if (options.roomCode) {
@@ -195,5 +217,17 @@ export class GameRoomsSocketClient {
     for (const listener of this.listeners[event]) {
       (listener as (...args: unknown[]) => void)(payload);
     }
+  }
+
+  private detachSocketListeners(
+    openHandler: () => void,
+    closeHandler: (event: { code: number; reason: string }) => void,
+    errorHandler: (event: unknown) => void,
+    messageHandler: (event: { data: string }) => void
+  ): void {
+    this.socket?.removeEventListener?.("open", openHandler);
+    this.socket?.removeEventListener?.("close", closeHandler);
+    this.socket?.removeEventListener?.("error", errorHandler);
+    this.socket?.removeEventListener?.("message", messageHandler);
   }
 }
