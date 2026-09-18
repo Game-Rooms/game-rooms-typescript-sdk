@@ -65,13 +65,8 @@ export class GameRoomsSocketClient {
     this.socket?.close(code, reason);
   }
 
-  on(event: "open", listener: () => void): void;
-  on(event: "close", listener: (event: { code: number; reason: string }) => void): void;
-  on(event: "error", listener: (event: unknown) => void): void;
-  on(event: "notification", listener: (packet: ServerPacket) => void): void;
-  on(event: "message", listener: (packet: ServerPacket) => void): void;
-  on(event: keyof ListenerMap, listener: (...args: unknown[]) => void): void {
-    (this.listeners[event] as Array<(...args: unknown[]) => void>).push(listener);
+  on<E extends keyof ListenerMap>(event: E, listener: ListenerMap[E][number]): void {
+    this.listeners[event].push(listener as never);
   }
 
   request<TResult = unknown>(opcode: string, params?: unknown): Promise<TResult> {
