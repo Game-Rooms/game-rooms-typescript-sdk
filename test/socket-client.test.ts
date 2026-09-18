@@ -111,12 +111,17 @@ describe("GameRoomsSocketClient", () => {
     await connected;
 
     let errorCount = 0;
+    let messageCount = 0;
     client.on("error", () => {
       errorCount += 1;
+    });
+    client.on("message", () => {
+      messageCount += 1;
     });
 
     fake.emit("message", { data: "not-json" });
     expect(errorCount).toBe(1);
+    expect(messageCount).toBe(0);
   });
 
   it("emits error for unmatched pc", async () => {

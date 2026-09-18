@@ -94,14 +94,18 @@ export class GameRoomsSocketClient {
         this.detachSocketListeners(socket, openHandler, closeHandler, errorHandler, messageHandler);
         this.activeHandlers = undefined;
         const closeError = new ProtocolError("Socket closed", { details: event });
-        this.emit("error", closeError);
         this.connectReject = undefined;
         this.rejectAllPending(closeError);
         this.socket = undefined;
         this.emit("close", event);
         if (!settled) {
-          reject(new ProtocolError("Socket closed before connection opened", { details: event }));
+          const preOpenError = new ProtocolError("Socket closed before connection opened", { details: event });
+          this.emit("error", preOpenError);
+          reject(preOpenError);
+          return;
         }
+
+        this.emit("error", closeError);
       };
 
       const errorHandler = (event: unknown) => {
@@ -111,6 +115,11 @@ export class GameRoomsSocketClient {
         this.connectReject = undefined;
         this.rejectAllPending(wrappedError);
         this.socket = undefined;
+        try {
+          socket.close();
+        } catch {
+          // no-op
+        }
         this.emit("error", wrappedError);
         if (!settled) {
           reject(wrappedError);
@@ -236,8 +245,6 @@ export class GameRoomsSocketClient {
       return;
     }
 
-    this.emit("message", packet);
-
     if (typeof packet.pc === "number") {
       const waiter = this.pending.get(packet.pc);
       if (!waiter) {
@@ -262,10 +269,12 @@ export class GameRoomsSocketClient {
         return;
       }
 
+      this.emit("message", packet);
       waiter.resolve(packet.result);
       return;
     }
 
+    this.emit("message", packet);
     this.emit("notification", packet);
   }
 
