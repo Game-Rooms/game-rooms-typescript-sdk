@@ -143,9 +143,8 @@ export class GameRoomsSocketClient {
     if (!socket) {
       return;
     }
-    this.socket = undefined;
-
-    if (socket.readyState !== OPEN_STATE) {
+    if (this.connectReject) {
+      this.socket = undefined;
       this.detachCurrentSocketListeners();
       const closeError = new ProtocolError("Socket closed before connection opened", {
         details: { code: code ?? 1000, reason: reason ?? "" }
