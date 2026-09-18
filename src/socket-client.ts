@@ -145,7 +145,6 @@ export class GameRoomsSocketClient {
       this.connectReject = undefined;
       this.emit("error", closeError);
       this.rejectAllPending(closeError);
-      this.emit("close", { code: code ?? 1000, reason: reason ?? "" });
     }
 
     socket.close(code, reason);
