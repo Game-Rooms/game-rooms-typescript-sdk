@@ -24,6 +24,10 @@ async function main() {
     wsUrl: "wss://your-game-rooms-api.example/socket"
   });
 
+  if (!room.hostToken) {
+    throw new Error("Expected a host token from createRoom response");
+  }
+
   await socket.connect({
     role: "host",
     roomCode: room.code,

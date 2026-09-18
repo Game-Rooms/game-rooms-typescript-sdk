@@ -7,7 +7,12 @@ export class GameRoomsHttpClient {
 
   constructor(options: HttpClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
-    this.fetchImpl = options.fetch ?? fetch;
+    const fallbackFetch = (globalThis as { fetch?: typeof fetch }).fetch;
+    if (!options.fetch && !fallbackFetch) {
+      throw new GameRoomsError("No fetch implementation found; provide fetch in this runtime");
+    }
+
+    this.fetchImpl = options.fetch ?? fallbackFetch!;
   }
 
   async createRoom(request: CreateRoomRequest): Promise<CreateRoomResponse> {

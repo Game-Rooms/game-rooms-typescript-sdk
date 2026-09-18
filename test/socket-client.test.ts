@@ -130,9 +130,14 @@ describe("GameRoomsSocketClient", () => {
     await connected;
 
     const requestPromise = client.request("object.get", { key: "state" });
+    let receivedError: unknown;
+    client.on("error", (error) => {
+      receivedError = error;
+    });
     fake.emit("error", new Error("boom"));
 
     await expect(requestPromise).rejects.toBeInstanceOf(ProtocolError);
+    expect(receivedError).toBeInstanceOf(ProtocolError);
   });
 
   it("requires exactly one room identifier", async () => {
@@ -163,5 +168,16 @@ describe("GameRoomsSocketClient", () => {
     expect(() => {
       new GameRoomsSocketClient({ wsUrl: "/socket" });
     }).toThrow(ProtocolError);
+  });
+
+  it("rejects connect when webSocketFactory throws", async () => {
+    const client = new GameRoomsSocketClient({
+      wsUrl: "wss://example.test/socket",
+      webSocketFactory: () => {
+        throw new Error("factory failed");
+      }
+    });
+
+    await expect(client.connect({ role: "host", roomCode: "ABCD" })).rejects.toBeInstanceOf(ProtocolError);
   });
 });
